@@ -82,36 +82,46 @@ function parseLatestLog(output) {
   const lines = output.split('\n').filter(Boolean);
   const events = [];
 
-  for (const line of lines.slice(-20)) {
-    // Paper version
-    if (line.includes('Starting minecraft server version')) {
-      const ver = line.match(/version\s+([\d.]+(-[\w]+)?)/);
-      if (ver) events.push({ type: 'version', value: ver[1] });
+  for (const line of lines) {
+    // Paper version - format: "Running Paper 1.21.11-69-main@94d0c97"
+    if (line.includes('Loading Paper') || line.includes('Running Paper')) {
+      const ver = line.match(/Paper\s+([\d.]+-[\w@-]+)/);
+      if (ver) events.push({ type: 'version', value: `Paper ${ver[1]}` });
     }
-    // Geyser version
-    if (line.includes('Geyser') && line.includes('Loading Geyser')) {
-      const ver = line.match(/Geyser version\s+([\d.]+-b\d+)/i);
+    // Also check "This server is running Paper version"
+    if (line.includes('This server is running Paper version')) {
+      const ver = line.match(/version\s+([\d.]+-[\w@-]+)/);
+      if (ver) events.push({ type: 'version', value: `Paper ${ver[1]}` });
+    }
+    // Geyser version - format: "[Geyser-Spigot] Loading server plugin Geyser-Spigot v2.10.0-SNAPSHOT"
+    if (line.includes('Geyser-Spigot') && line.includes('Loading server plugin')) {
+      const ver = line.match(/Geyser-Spigot\s+v([\d.]+-[\w]+(?:\s+\([^)]+\))?)/);
       if (ver) events.push({ type: 'geyser', value: ver[1] });
     }
-    // Player join
-    if (line.includes('joined the game') || line.includes('logged in')) {
-      const player = line.match(/\[Server thread\/INFO\]:\s*(\.\w+)/);
+    // Geyser startup complete
+    if (line.includes('[Geyser-Spigot] Done')) {
+      const dur = line.match(/Done\s+\(([\d.]+s)\)/);
+      if (dur) events.push({ type: 'geyser', value: `Started in ${dur[1]}` });
+    }
+    // Player join - format: "[Server thread/INFO]: .dimablochman joined the game"
+    if (line.includes('joined the game')) {
+      const player = line.match(/\[Server thread\/INFO\]:\s+([\w.]+)\s+joined/);
       const time = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
       if (player && time) {
         events.push({ type: 'join', player: player[1], time: time[1] });
       }
     }
-    // Player leave
+    // Player leave - format: "[Server thread/INFO]: .dimablochman left the game"
     if (line.includes('left the game') || line.includes('lost connection')) {
-      const player = line.match(/\[Server thread\/INFO\]:\s*(\.\w+)/);
+      const player = line.match(/\[Server thread\/INFO\]:\s+([\w.]+)\s+(?:left|lost)/);
       const time = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
       if (player && time) {
         events.push({ type: 'leave', player: player[1], time: time[1] });
       }
     }
-    // Server ready
-    if (line.includes('Done (') && line.includes('s)!')) {
-      const dur = line.match(/Done \(([\d.]+s)\)!/);
+    // Server ready - format: "[Server thread/INFO]: Done (88.268s)! For help, type "help""
+    if (line.includes('Done (') && line.includes('For help')) {
+      const dur = line.match(/Done\s+\(([\d.]+s)\)/);
       const time = line.match(/\[(\d{2}:\d{2}:\d{2})\]/);
       if (dur && time) {
         events.push({ type: 'ready', duration: dur[1], time: time[1] });
