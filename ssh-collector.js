@@ -145,6 +145,68 @@ function parseBackups(lsOutput) {
     .slice(0, 5);
 }
 
+export async function cleanupOldBackups() {
+  const startTime = Date.now();
+
+  try {
+    // Get all backup files
+    const backupList = await execSSH('ls -la /var/opt/minecraft/crafty/crafty-4/backups 2>/dev/null || echo ""');
+    
+    if (!backupList) {
+      return {
+        checkedAt: new Date().toISOString(),
+        latencyMs: Date.now() - startTime,
+        error: 'Could not list backups',
+      };
+    }
+
+    const allBackups = parseBackups(backupList);
+    
+    // Keep latest 5 valid backups
+    const backupsToKeep = allBackups.slice(0, 5);
+    const backupsToDelete = allBackups.slice(5);
+
+    if (backupsToDelete.length === 0) {
+      return {
+        checkedAt: new Date().toISOString(),
+        latencyMs: Date.now() - startTime,
+        kept: backupsToKeep.length,
+        deleted: 0,
+        message: 'No backups to clean up',
+      };
+    }
+
+    // Delete old backups
+    const deleteResults = [];
+    for (const backup of backupsToDelete) {
+      try {
+        const escapedName = backup.name.replace(/'/g, "'\\''");
+        await execSSH(`rm -f '/var/opt/minecraft/crafty/crafty-4/backups/${escapedName}'`);
+        deleteResults.push({ name: backup.name, success: true });
+      } catch (err) {
+        deleteResults.push({ name: backup.name, success: false, error: err.message });
+      }
+    }
+
+    return {
+      checkedAt: new Date().toISOString(),
+      latencyMs: Date.now() - startTime,
+      kept: backupsToKeep.length,
+      deleted: deleteResults.filter(r => r.success).length,
+      failed: deleteResults.filter(r => !r.success).length,
+      backupsKept: backupsToKeep.map(b => b.name),
+      backupsDeleted: deleteResults.filter(r => r.success).map(r => r.name),
+      errors: deleteResults.filter(r => !r.success).map(r => ({ name: r.name, error: r.error })),
+    };
+  } catch (error) {
+    return {
+      checkedAt: new Date().toISOString(),
+      latencyMs: Date.now() - startTime,
+      error: error.message,
+    };
+  }
+}
+
 export async function collectServerStatus() {
   const startTime = Date.now();
 

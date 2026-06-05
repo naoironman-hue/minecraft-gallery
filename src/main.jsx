@@ -38,6 +38,63 @@ const plugins = [
   'AutoOp 1.0',
 ];
 
+function CleanupButton() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const handleCleanup = async () => {
+    if (!confirm('Delete old backups? This will keep only the latest 5 valid backups.')) {
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
+
+    try {
+      const res = await fetch('/api/cleanup-backups', { method: 'POST' });
+      const data = await res.json();
+      setResult(data);
+      setTimeout(() => setResult(null), 10000); // Clear after 10s
+    } catch (err) {
+      setResult({ error: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: '1em' }}>
+      <button
+        onClick={handleCleanup}
+        disabled={loading}
+        style={{
+          padding: '0.5em 1em',
+          fontSize: '0.9em',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          backgroundColor: loading ? '#ccc' : '#ff6b6b',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '4px',
+        }}
+      >
+        {loading ? 'Cleaning up...' : 'Clean Up Old Backups'}
+      </button>
+      {result && (
+        <div style={{ marginTop: '0.5em', fontSize: '0.85em' }}>
+          {result.error ? (
+            <p style={{ color: '#ff6b6b' }}>Error: {result.error}</p>
+          ) : (
+            <p style={{ color: '#51cf66' }}>
+              ✓ Kept {result.kept}, deleted {result.deleted}
+              {result.failed > 0 && `, failed ${result.failed}`}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const { data, error, server, bedrock, disk } = LiveServerPanel();
 
@@ -229,6 +286,7 @@ function App() {
                   </div>
                 </dl>
               )}
+              <CleanupButton />
             </>
           )}
         </article>

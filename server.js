@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectServerStatus } from './ssh-collector.js';
+import { collectServerStatus, cleanupOldBackups } from './ssh-collector.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -88,6 +88,11 @@ app.get('/api/status', async (_req, res) => {
     bedrock: bedrockData,
     server: serverData,
   });
+});
+
+app.post('/api/cleanup-backups', async (_req, res) => {
+  const result = await cleanupOldBackups();
+  res.json(result);
 });
 
 app.use(express.static(path.join(__dirname, 'dist')));
