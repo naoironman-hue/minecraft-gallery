@@ -90,6 +90,11 @@ app.get('/api/status', async (_req, res) => {
   });
 });
 
+app.get('/api/cleanup-backups', async (_req, res) => {
+  const result = await cleanupOldBackups();
+  res.json(result);
+});
+
 app.post('/api/cleanup-backups', async (_req, res) => {
   const result = await cleanupOldBackups();
   res.json(result);
