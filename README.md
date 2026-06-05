@@ -1,11 +1,22 @@
-# minecraft-gallery
+# Minecraft Gallery
 
-Minecraft server status gallery for the local vibe platform
+Minecraft server status gallery for the local vibe platform.
 
-## Setup
+V0 is a verified static snapshot of the remote Crafty/Paper/Geyser server on the tailnet. V1 can add live polling via SSH/API.
 
-Add setup instructions here
+## Local dev
 
-## Usage
+```bash
+npm install
+npm run dev
+```
 
-Add usage instructions here
+## Build
+
+```bash
+npm run build
+```
+
+## Deploy target
+
+`http://minecraft.100.123.113.64.sslip.io`
