@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "express": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "express": "latest"
-  },
-  "devDependencies": {}
+    "ssh2": "^1.17.0",
+    "vite": "latest"
+  }
 }

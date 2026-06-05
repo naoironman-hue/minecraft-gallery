@@ -2,25 +2,32 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-const snapshot = {
-  host: 'ubuntu-4gb-fsn1-2',
-  tailnet: '100.100.163.40',
-  os: 'Ubuntu 24.04.1 LTS',
-  uptime: 'up 9 weeks, 2 days, 50 minutes',
-  service: 'crafty.service active',
-  disk: '35G / 38G used · 97% · 1.2G free',
-  craftySize: '17G',
-  minecraft: 'Paper 1.21.11-69',
-  mode: 'Creative',
-  lastReady: 'Done in 88.268s',
-  lastPlayer: '.dimablochman joined via Geyser/Floodgate at 10:47',
-};
+function LiveServerPanel() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
 
-const ports = [
-  { label: 'Java', port: '25565/tcp', state: 'listening', color: '#76ff3b' },
-  { label: 'Bedrock / Geyser', port: '25566/udp', state: 'listening', color: '#33d8ff' },
-  { label: 'Crafty UI', port: '8443/tcp', state: 'listening', color: '#ffd447' },
-];
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        const json = await res.json();
+        if (alive) { setData(json); setError(null); }
+      } catch (err) {
+        if (alive) setError(err.message);
+      }
+    }
+    load();
+    const timer = setInterval(load, 45000); // refresh every 45s
+    return () => { alive = false; clearInterval(timer); };
+  }, []);
+
+  const server = data?.server;
+  const bedrock = data?.bedrock;
+  const disk = server?.disk;
+
+  return { data, error, server, bedrock, disk };
+}
 
 const plugins = [
   'Geyser-Spigot 2.10.0-b1162',
@@ -31,134 +38,212 @@ const plugins = [
   'AutoOp 1.0',
 ];
 
-const alerts = [
-  { level: 'critical', title: 'Disk pressure', detail: 'Root disk is 97% full with only 1.2G free.' },
-  { level: 'warning', title: 'Backups look empty', detail: 'Latest backup zip markers found were 0 bytes.' },
-  { level: 'good', title: 'Server online', detail: 'Crafty, Java port, Bedrock/Geyser port, and Crafty UI are all reachable.' },
-];
-
-const timeline = [
-  ['10:35:00', 'Paper server started on *:25565'],
-  ['10:35:55', 'Geyser 2.10.0-b1162 loading'],
-  ['10:36:07', 'Geyser started on UDP 25566'],
-  ['10:36:08', 'Server ready: Done (88.268s)'],
-  ['10:47:50', '.dimablochman joined via Bedrock/Floodgate'],
-  ['10:48:28', '.dimablochman disconnected'],
-];
-
-function PortCard({ port }) {
-  return (
-    <div className="port-card" style={{ '--port': port.color }}>
-      <span>{port.label}</span>
-      <strong>{port.port}</strong>
-      <em>{port.state}</em>
-    </div>
-  );
-}
-
-function Alert({ item }) {
-  return (
-    <li className={`alert ${item.level}`}>
-      <span>{item.level}</span>
-      <div><strong>{item.title}</strong><p>{item.detail}</p></div>
-    </li>
-  );
-}
-
-function LiveBedrockPanel() {
-  const [status, setStatus] = useState(null);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      try {
-        const res = await fetch('/api/bedrock-status', { cache: 'no-store' });
-        const data = await res.json();
-        if (alive) { setStatus(data); setError(null); }
-      } catch (err) {
-        if (alive) setError(err.message);
-      }
-    }
-    load();
-    const timer = setInterval(load, 30000);
-    return () => { alive = false; clearInterval(timer); };
-  }, []);
-
-  const bedrock = status?.bedrock;
-  return (
-    <article className="panel live-panel">
-      <span className="label">live api / bedrock ping</span>
-      <h2>{status?.online ? 'Geyser is live' : 'Checking Geyser'}</h2>
-      {error && <p className="live-error">Browser error: {error}</p>}
-      {!status && !error && <p className="live-muted">Waiting for /api/bedrock-status...</p>}
-      {status && (
-        <dl className="live-dl">
-          <div><dt>Online</dt><dd>{status.online ? 'yes' : 'no'}</dd></div>
-          <div><dt>Latency</dt><dd>{status.latencyMs}ms</dd></div>
-          <div><dt>Version</dt><dd>{bedrock?.version || 'unknown'}</dd></div>
-          <div><dt>Players</dt><dd>{bedrock ? `${bedrock.onlinePlayers}/${bedrock.maxPlayers}` : 'unknown'}</dd></div>
-          <div><dt>MOTD</dt><dd>{bedrock?.motd || status.error || 'unknown'}</dd></div>
-          <div><dt>Checked</dt><dd>{status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'unknown'}</dd></div>
-        </dl>
-      )}
-    </article>
-  );
-}
-
 function App() {
+  const { data, error, server, bedrock, disk } = LiveServerPanel();
+
+  if (error) {
+    return (
+      <main>
+        <section className="hero">
+          <div className="kicker">error</div>
+          <h1>Failed to load status</h1>
+          <p>{error}</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!data) {
+    return (
+      <main>
+        <section className="hero">
+          <div className="kicker">loading</div>
+          <h1>Fetching live status...</h1>
+        </section>
+      </main>
+    );
+  }
+
+  const diskSummary = disk
+    ? `${disk.used} / ${disk.total} used · ${disk.percent} · ${disk.free} free`
+    : 'loading...';
+
+  const bedrockOnline = bedrock?.online || false;
+  const bedrockVersion = bedrock?.bedrock?.version || 'unknown';
+  const bedrockPlayers = bedrock?.bedrock
+    ? `${bedrock.bedrock.onlinePlayers}/${bedrock.bedrock.maxPlayers}`
+    : 'unknown';
+
   return (
     <main>
       <section className="hero">
         <div className="kicker">mineclaw / crafty / geyser</div>
         <h1>Minecraft Gallery</h1>
-        <p>A visual status board for the remote Crafty server on the tailnet. It now includes a live Bedrock/Geyser ping API that refreshes every 30 seconds.</p>
+        <p>
+          Live status board for the remote Crafty server. Updates every 45 seconds via server-to-server SSH + UDP ping.
+        </p>
+        {data.checkedAt && (
+          <p style={{ opacity: 0.6, fontSize: '0.9em' }}>
+            Last checked: {new Date(data.checkedAt).toLocaleTimeString()}
+          </p>
+        )}
       </section>
 
       <section className="dashboard">
         <article className="server-card">
           <div className="orb" />
           <span className="label">server</span>
-          <h2>{snapshot.host}</h2>
+          <h2>{server?.host || 'ubuntu-4gb-fsn1-2'}</h2>
           <dl>
-            <div><dt>Tailnet</dt><dd>{snapshot.tailnet}</dd></div>
-            <div><dt>Service</dt><dd>{snapshot.service}</dd></div>
-            <div><dt>Minecraft</dt><dd>{snapshot.minecraft}</dd></div>
-            <div><dt>Mode</dt><dd>{snapshot.mode}</dd></div>
-            <div><dt>Ready</dt><dd>{snapshot.lastReady}</dd></div>
+            <div>
+              <dt>Tailnet</dt>
+              <dd>{server?.tailnet || '100.100.163.40'}</dd>
+            </div>
+            <div>
+              <dt>Uptime</dt>
+              <dd>{server?.uptime || 'unknown'}</dd>
+            </div>
+            <div>
+              <dt>Service</dt>
+              <dd>{server?.service?.status || 'unknown'}</dd>
+            </div>
+            <div>
+              <dt>Paper</dt>
+              <dd>{server?.minecraft?.paper || 'unknown'}</dd>
+            </div>
+            <div>
+              <dt>Geyser</dt>
+              <dd>{server?.minecraft?.geyser || 'unknown'}</dd>
+            </div>
+            <div>
+              <dt>Crafty Size</dt>
+              <dd>{server?.craftySize || 'unknown'}</dd>
+            </div>
           </dl>
         </article>
 
         <article className="disk-card">
           <span className="label">disk</span>
-          <div className="meter"><i /></div>
-          <h3>{snapshot.disk}</h3>
-          <p>Crafty directory size: {snapshot.craftySize}. This is the next operational risk to clean up.</p>
+          <div className="meter">
+            <i style={{ width: disk?.percent || '0%' }} />
+          </div>
+          <h3>{diskSummary}</h3>
+          <p>
+            Crafty directory size: {server?.craftySize || 'unknown'}. This is the next operational risk to clean up.
+          </p>
         </article>
 
         <section className="ports">
-          {ports.map((port) => <PortCard key={port.port} port={port} />)}
+          <div className="port-card" style={{ '--port': '#76ff3b' }}>
+            <span>Java</span>
+            <strong>25565/tcp</strong>
+            <em>listening</em>
+          </div>
+          <div className="port-card" style={{ '--port': '#33d8ff' }}>
+            <span>Bedrock / Geyser</span>
+            <strong>25566/udp</strong>
+            <em>listening</em>
+          </div>
+          <div className="port-card" style={{ '--port': '#ffd447' }}>
+            <span>Crafty UI</span>
+            <strong>8443/tcp</strong>
+            <em>listening</em>
+          </div>
         </section>
       </section>
 
       <section className="split">
-        <LiveBedrockPanel />
-        <article className="panel">
-          <span className="label">plugins</span>
-          <h2>Bridge stack</h2>
-          <div className="chips">{plugins.map((plugin) => <span key={plugin}>{plugin}</span>)}</div>
+        <article className="panel live-panel">
+          <span className="label">live bedrock ping</span>
+          <h2>{bedrockOnline ? 'Geyser is live' : 'Geyser offline'}</h2>
+          {bedrock && (
+            <dl className="live-dl">
+              <div>
+                <dt>Online</dt>
+                <dd>{bedrockOnline ? 'yes' : 'no'}</dd>
+              </div>
+              <div>
+                <dt>Latency</dt>
+                <dd>{bedrock.latencyMs}ms</dd>
+              </div>
+              <div>
+                <dt>Version</dt>
+                <dd>{bedrockVersion}</dd>
+              </div>
+              <div>
+                <dt>Players</dt>
+                <dd>{bedrockPlayers}</dd>
+              </div>
+              <div>
+                <dt>MOTD</dt>
+                <dd>{bedrock.bedrock?.motd || bedrock.error || 'unknown'}</dd>
+              </div>
+            </dl>
+          )}
         </article>
+
         <article className="panel">
-          <span className="label">alerts</span>
-          <h2>What needs attention</h2>
-          <ul className="alerts">{alerts.map((alert) => <Alert key={alert.title} item={alert} />)}</ul>
+          <span className="label">recent activity</span>
+          <h2>Player & Server Events</h2>
+          {server?.activity && (
+            <dl className="live-dl">
+              <div>
+                <dt>Last Join</dt>
+                <dd>{server.activity.lastJoin}</dd>
+              </div>
+              <div>
+                <dt>Last Leave</dt>
+                <dd>{server.activity.lastLeave}</dd>
+              </div>
+              <div>
+                <dt>Server Ready</dt>
+                <dd>{server.activity.serverReady}</dd>
+              </div>
+            </dl>
+          )}
+        </article>
+
+        <article className="panel">
+          <span className="label">backups</span>
+          <h2>Latest Valid Backups</h2>
+          {server?.backups && (
+            <>
+              <p>
+                Total backups: {server.backups.total}
+              </p>
+              {server.backups.latest && (
+                <dl className="live-dl">
+                  <div>
+                    <dt>Latest</dt>
+                    <dd>{server.backups.latest.name}</dd>
+                  </div>
+                  <div>
+                    <dt>Size</dt>
+                    <dd>{server.backups.latest.size} bytes</dd>
+                  </div>
+                  <div>
+                    <dt>Date</dt>
+                    <dd>
+                      {server.backups.latest.date} {server.backups.latest.time}
+                    </dd>
+                  </div>
+                </dl>
+              )}
+            </>
+          )}
         </article>
       </section>
 
-      <section className="timeline">
-        <span className="label">latest log trace</span>
-        <h2>Startup and player activity</h2>
-        {timeline.map(([time, event]) => <div className="event" key={time}><time>{time}</time><p>{event}</p></div>)}
+      <section className="split">
+        <article className="panel">
+          <span className="label">plugins</span>
+          <h2>Bridge stack</h2>
+          <div className="chips">
+            {plugins.map((plugin) => (
+              <span key={plugin}>{plugin}</span>
+            ))}
+          </div>
+        </article>
       </section>
     </main>
   );

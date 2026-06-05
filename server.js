@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { collectServerStatus } from './ssh-collector.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -74,17 +75,18 @@ app.get('/api/bedrock-status', async (_req, res) => {
 });
 
 app.get('/api/status', async (_req, res) => {
-  const bedrock = await pingBedrock(BEDROCK_HOST, BEDROCK_PORT);
+  const [bedrock, server] = await Promise.allSettled([
+    pingBedrock(BEDROCK_HOST, BEDROCK_PORT),
+    collectServerStatus(),
+  ]);
+
+  const bedrockData = bedrock.status === 'fulfilled' ? bedrock.value : { ok: false, error: bedrock.reason?.message };
+  const serverData = server.status === 'fulfilled' ? server.value : { error: server.reason?.message };
+
   res.json({
     checkedAt: new Date().toISOString(),
-    server: { host: 'ubuntu-4gb-fsn1-2', tailnet: BEDROCK_HOST, javaPort: 25565, bedrockPort: BEDROCK_PORT },
-    bedrock,
-    staticSnapshot: {
-      crafty: 'active at last build',
-      disk: '97% used / 1.2G free at last build',
-      paper: '1.21.11-69 at last build',
-      geyser: '2.10.0-b1162 at last build'
-    }
+    bedrock: bedrockData,
+    server: serverData,
   });
 });
 
