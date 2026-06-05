@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -65,13 +65,54 @@ function Alert({ item }) {
   );
 }
 
+function LiveBedrockPanel() {
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const res = await fetch('/api/bedrock-status', { cache: 'no-store' });
+        const data = await res.json();
+        if (alive) { setStatus(data); setError(null); }
+      } catch (err) {
+        if (alive) setError(err.message);
+      }
+    }
+    load();
+    const timer = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(timer); };
+  }, []);
+
+  const bedrock = status?.bedrock;
+  return (
+    <article className="panel live-panel">
+      <span className="label">live api / bedrock ping</span>
+      <h2>{status?.online ? 'Geyser is live' : 'Checking Geyser'}</h2>
+      {error && <p className="live-error">Browser error: {error}</p>}
+      {!status && !error && <p className="live-muted">Waiting for /api/bedrock-status...</p>}
+      {status && (
+        <dl className="live-dl">
+          <div><dt>Online</dt><dd>{status.online ? 'yes' : 'no'}</dd></div>
+          <div><dt>Latency</dt><dd>{status.latencyMs}ms</dd></div>
+          <div><dt>Version</dt><dd>{bedrock?.version || 'unknown'}</dd></div>
+          <div><dt>Players</dt><dd>{bedrock ? `${bedrock.onlinePlayers}/${bedrock.maxPlayers}` : 'unknown'}</dd></div>
+          <div><dt>MOTD</dt><dd>{bedrock?.motd || status.error || 'unknown'}</dd></div>
+          <div><dt>Checked</dt><dd>{status.checkedAt ? new Date(status.checkedAt).toLocaleTimeString() : 'unknown'}</dd></div>
+        </dl>
+      )}
+    </article>
+  );
+}
+
 function App() {
   return (
     <main>
       <section className="hero">
         <div className="kicker">mineclaw / crafty / geyser</div>
         <h1>Minecraft Gallery</h1>
-        <p>A visual status board for the remote Crafty server on the tailnet. V0 is a verified static snapshot; v1 can poll SSH or an API for live data.</p>
+        <p>A visual status board for the remote Crafty server on the tailnet. It now includes a live Bedrock/Geyser ping API that refreshes every 30 seconds.</p>
       </section>
 
       <section className="dashboard">
@@ -101,6 +142,7 @@ function App() {
       </section>
 
       <section className="split">
+        <LiveBedrockPanel />
         <article className="panel">
           <span className="label">plugins</span>
           <h2>Bridge stack</h2>
