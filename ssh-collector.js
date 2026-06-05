@@ -2,7 +2,12 @@ import { Client } from 'ssh2';
 
 const SSH_HOST = process.env.SSH_HOST || '100.100.163.40';
 const SSH_USER = process.env.SSH_USER || 'dima';
-const SSH_KEY = process.env.SSH_PRIVATE_KEY;
+const SSH_KEY_RAW = process.env.SSH_PRIVATE_KEY;
+const SSH_KEY = SSH_KEY_RAW 
+  ? (SSH_KEY_RAW.includes('-----BEGIN') 
+      ? SSH_KEY_RAW 
+      : Buffer.from(SSH_KEY_RAW, 'base64').toString('utf8'))
+  : null;
 
 function execSSH(command) {
   return new Promise((resolve, reject) => {
